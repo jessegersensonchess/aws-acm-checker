@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/acm"
 )
 
-func scanRegion(region, profile string, wgRegion *sync.WaitGroup) {
+func scanRegion(region, profile, validationType string, wgRegion *sync.WaitGroup) {
 	defer wgRegion.Done()
 
 	sess, err := session.NewSessionWithOptions(session.Options{
@@ -47,7 +48,10 @@ func scanRegion(region, profile string, wgRegion *sync.WaitGroup) {
 			}
 			for _, validationOption := range descResult.Certificate.DomainValidationOptions {
 				if validationOption.DomainName != nil && validationOption.ValidationMethod != nil {
-					fmt.Printf("[Region: %s] %s uses %s for validation\n", region, *validationOption.DomainName, *validationOption.ValidationMethod)
+					if validationType == "" || validationType == *validationOption.ValidationMethod {
+
+						fmt.Printf("[Region: %s] %s uses %s for validation\n", region, *validationOption.DomainName, *validationOption.ValidationMethod)
+					}
 				}
 			}
 		}(summary)
@@ -55,12 +59,17 @@ func scanRegion(region, profile string, wgRegion *sync.WaitGroup) {
 	wgCerts.Wait()
 }
 
+var validationType string
+
 func main() {
+	start := time.Now()
 	var profile string
 	var regions string
 
 	flag.StringVar(&profile, "profile", "default", "AWS CLI profile to use.")
 	flag.StringVar(&regions, "regions", "us-west-2", "Comma-separated list of AWS regions to scan.")
+	flag.StringVar(&validationType, "validationType", "", "Filter results by validation type (e.g., EMAIL, DNS). Leave empty for all types.")
+
 	flag.Parse()
 
 	regionList := strings.Split(regions, ",")
@@ -68,8 +77,9 @@ func main() {
 
 	for _, region := range regionList {
 		wg.Add(1)
-		go scanRegion(region, profile, &wg)
+		go scanRegion(region, profile, validationType, &wg)
 	}
 
 	wg.Wait() // Wait for all goroutines to finish
+	fmt.Println("\ntook", time.Since(start))
 }
