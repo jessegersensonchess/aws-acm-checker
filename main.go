@@ -11,8 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/acm"
 )
 
-func scanRegion(region, profile string, wg *sync.WaitGroup) {
-	defer wg.Done()
+func scanRegion(region, profile string, wgRegion *sync.WaitGroup) {
+	defer wgRegion.Done()
 
 	sess, err := session.NewSessionWithOptions(session.Options{
 		Profile: profile,
@@ -31,21 +31,28 @@ func scanRegion(region, profile string, wg *sync.WaitGroup) {
 		return
 	}
 
+	var wgCerts sync.WaitGroup
 	for _, summary := range result.CertificateSummaryList {
-		describeInput := &acm.DescribeCertificateInput{
-			CertificateArn: summary.CertificateArn,
-		}
-		descResult, err := svc.DescribeCertificate(describeInput)
-		if err != nil {
-			fmt.Printf("Error describing certificate in region %s: %v\n", region, err)
-			continue
-		}
-		for _, validationOption := range descResult.Certificate.DomainValidationOptions {
-			if validationOption.DomainName != nil && validationOption.ValidationMethod != nil {
-				fmt.Printf("\n[Region: %s] %s %s", region, *validationOption.DomainName, *validationOption.ValidationMethod)
+		wgCerts.Add(1)
+		go func(summary *acm.CertificateSummary) {
+			defer wgCerts.Done()
+
+			describeInput := &acm.DescribeCertificateInput{
+				CertificateArn: summary.CertificateArn,
 			}
-		}
+			descResult, err := svc.DescribeCertificate(describeInput)
+			if err != nil {
+				fmt.Printf("Error describing certificate in region %s: %v\n", region, err)
+				return
+			}
+			for _, validationOption := range descResult.Certificate.DomainValidationOptions {
+				if validationOption.DomainName != nil && validationOption.ValidationMethod != nil {
+					fmt.Printf("[Region: %s] %s uses %s for validation\n", region, *validationOption.DomainName, *validationOption.ValidationMethod)
+				}
+			}
+		}(summary)
 	}
+	wgCerts.Wait()
 }
 
 func main() {
