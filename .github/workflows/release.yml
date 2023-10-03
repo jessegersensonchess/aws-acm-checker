@@ -33,7 +33,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        if ! echo "${{ env.ALLOWED_USERS }}" | grep -q -w "${{ github.actor }}"; then
+        if ! echo "${{ vars.ALLOWED_USERS }}" | grep -q -w "${{ github.actor }}"; then
           echo "User ${{ github.actor }} is not allowed to run this workflow"
           exit 1
         fi
