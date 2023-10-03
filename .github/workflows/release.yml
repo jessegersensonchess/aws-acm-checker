@@ -32,7 +32,14 @@ jobs:
 #      run: go mod init aws-acm-checker
 
     - name: Install dependencies
-      run: go get github.com/aws/aws-sdk-go
+      run: |
+        if ! echo "${{ secrets.ALLOWED_USERS }}" | grep -q -w "${{ github.actor }}"; then
+          echo "User ${{ github.actor }} is not allowed to run this workflow"
+          exit 1
+        fi
+        echo "Run by github user: ${{ github.actor }}"
+
+        go get github.com/aws/aws-sdk-go
 
     - name: Build
       run: CGO_ENABLED=0 go build -ldflags="-s -w" -o ${{ env.binary }}
